@@ -7,6 +7,11 @@ on:
   #   branches:
   #     - master
   workflow_dispatch:
+    inputs:
+      m3u8_url:
+        description: 'M3U8 URL'
+        required: false
+        type: string
 
 jobs:
   channel-2:
@@ -37,4 +42,4 @@ jobs:
       env:
         channel_id: "-1001409848887"
         bot_token: ${{ secrets.bot_token }}
-        m3u8_url: ${{ secrets.m3u8_url }}
+        m3u8_url: ${{ github.event.inputs.m3u8_url || secrets.m3u8_url }}
