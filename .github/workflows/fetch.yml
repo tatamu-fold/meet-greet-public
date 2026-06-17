@@ -1,0 +1,59 @@
+name: fetch
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_hour:
+        description: 'Start hour (JST)'
+        required: true
+        type: string
+      start_min:
+        description: 'Start minute (JST)'
+        required: false
+        default: '0'
+        type: string
+      duration_s:
+        description: 'Duration in seconds'
+        required: false
+        default: '4800'
+        type: string
+      workflow_id:
+        description: 'Target workflow ID (e.g. channel-1.yml)'
+        required: true
+        type: string
+
+jobs:
+  fetch-data:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Clone private repo and run code
+      env:
+        PAT_GITHUB: ${{ secrets.PAT_GITHUB }}
+      run: |
+        git clone https://x-access-token:${PAT_GITHUB}@github.com/tatamu-fold/meet-greet.git
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
+
+    - name: Run apt and pip
+      run: |
+        sudo apt update
+        sudo apt install p7zip-full
+        sudo apt install curl
+        pip install requests pytz python-telegram-bot
+
+    - name: Run Python script
+      run: |
+        cd meet-greet
+        python fetch.py
+      env:
+        bot_token: ${{ secrets.bot_token }}
+        chat_id: ${{ secrets.chat_id }}
+        PAT_GITHUB: ${{ secrets.PAT_GITHUB }}
+        WORKFLOW_ID: ${{ github.event.inputs.workflow_id }}
+        start_hour: ${{ github.event.inputs.start_hour }}
+        start_min: ${{ github.event.inputs.start_min }}
+        duration_s: ${{ github.event.inputs.duration_s }}

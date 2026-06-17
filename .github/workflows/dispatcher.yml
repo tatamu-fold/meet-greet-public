@@ -1,0 +1,96 @@
+name: dispatcher
+
+on:
+  schedule:
+    - cron: '0 22 * * *'  # JST 07:00 (which is 22:00 UTC previous day)
+  workflow_dispatch:
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
+
+    - name: Install pytz for time calculation
+      run: pip install pytz
+
+    - name: Calculate Sleep and Parameters
+      run: |
+        python -c "
+        import os
+        import pytz
+        from datetime import datetime
+
+        tokyo_tz = pytz.timezone('Asia/Tokyo')
+        now = datetime.now(tokyo_tz)
+        print(f'Current JST: {now.strftime(\"%Y-%m-%d %H:%M:%S\")}')
+
+        current_hour = now.hour
+
+        if current_hour in [7, 8]:
+            target_fetch_hour = 9
+        else:
+            target_fetch_hour = current_hour + 1
+
+        # Target fetch time (top of the hour)
+        target_fetch_time = now.replace(hour=target_fetch_hour, minute=0, second=0, microsecond=0)
+
+        # Sleep duration to get to the top of the hour
+        sleep_until_fetch = int((target_fetch_time - now).total_seconds())
+        if sleep_until_fetch < 0:
+            sleep_until_fetch = 0
+
+        # Target workflow selection
+        if target_fetch_hour in [9, 10, 13, 14, 17, 18]:
+            target_workflow = 'channel-1.yml'
+        else:
+            target_workflow = 'channel-2.yml'
+
+        should_trigger_next = 'true' if target_fetch_hour < 20 else 'false'
+
+        print(f'TARGET_FETCH_HOUR: {target_fetch_hour}')
+        print(f'SLEEP_UNTIL_FETCH: {sleep_until_fetch} seconds')
+        print(f'TARGET_WORKFLOW: {target_workflow}')
+        print(f'SHOULD_TRIGGER_NEXT: {should_trigger_next}')
+
+        with open(os.environ['GITHUB_ENV'], 'a') as f:
+            f.write(f'TARGET_FETCH_HOUR={target_fetch_hour}\n')
+            f.write(f'SLEEP_UNTIL_FETCH={sleep_until_fetch}\n')
+            f.write(f'TARGET_WORKFLOW={target_workflow}\n')
+            f.write(f'SHOULD_TRIGGER_NEXT={should_trigger_next}\n')
+        "
+
+    - name: Sleep until JST fetch time
+      run: |
+        echo "Sleeping for ${{ env.SLEEP_UNTIL_FETCH }} seconds..."
+        sleep ${{ env.SLEEP_UNTIL_FETCH }}
+
+    - name: Call Fetch Workflow
+      env:
+        PAT_GITHUB: ${{ secrets.PAT_GITHUB }}
+      run: |
+        curl -X POST \
+          -H "Authorization: token ${PAT_GITHUB}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/tatamu-fold/meet-greet-public/actions/workflows/fetch.yml/dispatches \
+          -d "{\"ref\":\"${{ github.ref_name }}\",\"inputs\":{\"start_hour\":\"${{ env.TARGET_FETCH_HOUR }}\",\"start_min\":\"0\",\"duration_s\":\"4800\",\"workflow_id\":\"${{ env.TARGET_WORKFLOW }}\"}}"
+
+    - name: Sleep until self-trigger time (40 minutes)
+      run: |
+        echo "Sleeping for 2400 seconds (40 minutes)..."
+        sleep 2400
+
+    - name: Trigger next Dispatcher (self-loop)
+      if: env.SHOULD_TRIGGER_NEXT == 'true'
+      env:
+        PAT_GITHUB: ${{ secrets.PAT_GITHUB }}
+      run: |
+        curl -X POST \
+          -H "Authorization: token ${PAT_GITHUB}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/tatamu-fold/meet-greet-public/actions/workflows/dispatcher.yml/dispatches \
+          -d "{\"ref\":\"${{ github.ref_name }}\"}"
