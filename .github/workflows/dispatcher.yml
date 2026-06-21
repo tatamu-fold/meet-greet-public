@@ -45,7 +45,7 @@ jobs:
             sleep_until_fetch = 0
 
         # Target workflow selection
-        if target_fetch_hour in [9, 10, 13, 14, 17, 18]:
+        if target_fetch_hour in [9, 11, 13, 15, 17, 19]:
             target_workflow = 'channel-1.yml'
         else:
             target_workflow = 'channel-2.yml'
